@@ -9,6 +9,15 @@ interface MemoEditorProps {
     autoSave?: boolean;
 }
 
+interface ContextMenuPosition {
+    x: number;
+    y: number;
+}
+
+interface SubmenuState {
+    visible: boolean;
+}
+
 const MemoEditor: React.FC<MemoEditorProps> = ({
     initialContent = '',
     onSave,
@@ -19,7 +28,8 @@ const MemoEditor: React.FC<MemoEditorProps> = ({
     const [hasChanges, setHasChanges] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
-    const [isDragging, setIsDragging] = useState(false);
+    const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null);
+    const [submenuVisible, setSubmenuVisible] = useState(false);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const initialContentRef = useRef(initialContent);
@@ -32,10 +42,19 @@ const MemoEditor: React.FC<MemoEditorProps> = ({
     }, [initialContent]);
 
     useEffect(() => {
-        // フォーカスを当てる
         if (textareaRef.current) {
             textareaRef.current.focus();
         }
+    }, []);
+
+    useEffect(() => {
+        // コンテキストメニューを閉じるためのグローバルクリックハンドラー
+        const handleGlobalClick = () => {
+            setContextMenu(null);
+            setSubmenuVisible(false);
+        };
+        document.addEventListener('click', handleGlobalClick);
+        return () => document.removeEventListener('click', handleGlobalClick);
     }, []);
 
     // 自動保存（debounce: 2秒後に保存）
@@ -65,110 +84,9 @@ const MemoEditor: React.FC<MemoEditorProps> = ({
         setHasChanges(newContent !== initialContentRef.current);
     };
 
-    const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-        console.log('🎯 PASTE EVENT TRIGGERED!');
-
-        const clipboardData = e.clipboardData;
-        if (!clipboardData) {
-            console.log('❌ No clipboard data available');
-            return;
-        }
-
-        console.log('📋 Clipboard data:', {
-            items: clipboardData.items.length,
-            files: clipboardData.files.length,
-            types: Array.from(clipboardData.types)
-        });
-
-        // 全ての型のデータを取得して確認
-        for (const type of clipboardData.types) {
-            try {
-                const data = clipboardData.getData(type);
-                console.log(`📄 Data for "${type}":`, JSON.stringify(data));
-            } catch (error) {
-                console.log(`❌ Failed to get data for "${type}":`, error);
-            }
-        }
-
-        // 全てのアイテムを詳細にログ
-        console.log('--- Clipboard Items ---');
-        for (let i = 0; i < clipboardData.items.length; i++) {
-            const item = clipboardData.items[i];
-            console.log(`  [${i}] kind: ${item.kind}, type: ${item.type}`);
-        }
-
-        console.log('--- Clipboard Files ---');
-        for (let i = 0; i < clipboardData.files.length; i++) {
-            const file = clipboardData.files[i];
-            console.log(`  [${i}] name: ${file.name}, type: ${file.type}, size: ${file.size}`);
-        }
-
-        // 画像があるかを確認（スクリーンショットの直接貼り付けなど）
-        let hasImage = false;
-        let imageIndex = -1;
-
-        // まずitems配列をチェック
-        for (let i = 0; i < clipboardData.items.length; i++) {
-            const item = clipboardData.items[i];
-            if (item.type.indexOf('image/') === 0 || item.type.includes('image')) {
-                hasImage = true;
-                imageIndex = i;
-                console.log(`✅ Image detected in items[${i}]: ${item.type}`);
-                break;
-            }
-        }
-
-        // files配列もチェック
-        if (!hasImage && clipboardData.files.length > 0) {
-            for (let i = 0; i < clipboardData.files.length; i++) {
-                const file = clipboardData.files[i];
-                if (file.type.indexOf('image/') === 0 || file.type.includes('image') || file.name.match(/\.(png|jpg|jpeg|gif|webp|bmp)$/i)) {
-                    hasImage = true;
-                    console.log(`✅ Image detected in files[${i}]: ${file.type} (${file.name})`);
-                    break;
-                }
-            }
-        }
-
-        // 画像が見つかったらデフォルトの貼り付けを防止
-        if (hasImage) {
-            console.log('🚫 Preventing default paste behavior');
-            e.preventDefault();
-            e.stopPropagation();
-        } else {
-            console.log('ℹ️ No image detected - allowing default text paste');
-            return;
-        }
-
-        // items配列から取得
-        for (let i = 0; i < clipboardData.items.length; i++) {
-            const item = clipboardData.items[i];
-
-            if (item.type.indexOf('image/') === 0) {
-                console.log(`🔄 Attempting to get file from items[${i}]`);
-                const file = item.getAsFile();
-                if (file) {
-                    console.log('✅ File obtained from items:', { name: file.name, type: file.type, size: file.size });
-                    await processImageFile(file);
-                    return;
-                } else {
-                    console.error('❌ getAsFile() returned null');
-                }
-            }
-        }
-
-        // files配列から取得
-        for (let i = 0; i < clipboardData.files.length; i++) {
-            const file = clipboardData.files[i];
-
-            if (file.type.indexOf('image/') === 0 || file.name.match(/\.(png|jpg|jpeg|gif|webp|bmp)$/i)) {
-                console.log('✅ Using file from files array:', { name: file.name, type: file.type, size: file.size });
-                await processImageFile(file);
-                return;
-            }
-        }
-
-        console.error('❌ Image was detected but could not be extracted');
+    const handleContextMenu = (e: React.MouseEvent<HTMLTextAreaElement>) => {
+        e.preventDefault();
+        setContextMenu({ x: e.clientX, y: e.clientY });
     };
 
     const processImageFile = async (file: File) => {
@@ -250,7 +168,37 @@ const MemoEditor: React.FC<MemoEditorProps> = ({
         onBack();
     };
 
-    const handleImageButtonClick = () => {
+    const handleOCRFromClipboard = async () => {
+        setContextMenu(null);
+        try {
+            const clipboardItems = await navigator.clipboard.read();
+            for (const item of clipboardItems) {
+                for (const type of item.types) {
+                    if (type.startsWith('image/')) {
+                        const blob = await item.getType(type);
+                        const file = new File([blob], 'clipboard.png', { type });
+                        await processImageFile(file);
+                        return;
+                    }
+                }
+            }
+            alert('クリップボードに画像がありません。\n画像をコピーしてから再度お試しください。');
+        } catch (error) {
+            console.error('Clipboard error:', error);
+            if (error instanceof Error) {
+                if (error.name === 'NotAllowedError') {
+                    alert('クリップボードへのアクセスが拒否されました。\n\nブラウザの設定でクリップボードへのアクセスを許可してください。\n\n代わりに「ファイルを選択」から画像を読み込むこともできます。');
+                } else {
+                    alert('クリップボードへのアクセスに失敗しました。\n\nエラー: ' + error.message + '\n\n代わりに「ファイルを選択」から画像を読み込んでください。');
+                }
+            } else {
+                alert('クリップボードへのアクセスに失敗しました。\n\n代わりに「ファイルを選択」から画像を読み込んでください。');
+            }
+        }
+    };
+
+    const handleOCRFromFile = () => {
+        setContextMenu(null);
         fileInputRef.current?.click();
     };
 
@@ -265,48 +213,6 @@ const MemoEditor: React.FC<MemoEditorProps> = ({
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
         }
-    };
-
-    const handleDragOver = (e: React.DragEvent<HTMLTextAreaElement>) => {
-        e.preventDefault();
-        e.stopPropagation();
-        e.dataTransfer.dropEffect = 'copy';
-        setIsDragging(true);
-    };
-
-    const handleDragLeave = (e: React.DragEvent<HTMLTextAreaElement>) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsDragging(false);
-    };
-
-    const handleDrop = async (e: React.DragEvent<HTMLTextAreaElement>) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsDragging(false);
-
-        console.log('🎯 DROP EVENT TRIGGERED!');
-
-        const files = Array.from(e.dataTransfer.files);
-        console.log(`📁 Dropped ${files.length} file(s)`);
-
-        if (files.length === 0) {
-            console.log('❌ No files in drop event');
-            return;
-        }
-
-        for (const file of files) {
-            console.log('📄 File:', { name: file.name, type: file.type, size: file.size });
-
-            // 画像ファイルかチェック
-            if (file.type.startsWith('image/') || file.name.match(/\.(png|jpg|jpeg|gif|webp|bmp)$/i)) {
-                console.log('✅ Processing image file');
-                await processImageFile(file);
-                return; // 最初の画像のみ処理
-            }
-        }
-
-        console.log('ℹ️ No image files found in dropped files');
     };
 
     return (
@@ -330,40 +236,58 @@ const MemoEditor: React.FC<MemoEditorProps> = ({
                     {isSaving && <span className="saving">保存中...</span>}
                     {!isSaving && hasChanges && !isProcessing && <span className="unsaved">未保存</span>}
                 </div>
-                <div className="editor-actions">
-                    <button onClick={handleImageButtonClick} className="image-button" title="画像からOCR" disabled={isProcessing}>
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                            <circle cx="8.5" cy="8.5" r="1.5" />
-                            <polyline points="21 15 16 10 5 21" />
-                        </svg>
-                    </button>
-                    <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*"
-                        onChange={handleImageUpload}
-                        style={{ display: 'none' }}
-                    />
-                </div>
-
             </div>
             <textarea
                 ref={textareaRef}
-                className={`memo-textarea ${isDragging ? 'dragging' : ''}`}
+                className="memo-textarea"
                 value={content}
                 onChange={handleContentChange}
-                onPaste={handlePaste}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                placeholder="メモを入力してください...&#10;&#10;OCR機能の使い方：&#10;・ 上のボタンから画像を選択&#10;・ 画像ファイルをドラッグ&ドロップ&#10;・ Ctrl+V で画像を貼り付け"
+                onContextMenu={handleContextMenu}
+                placeholder="メモを入力してください...&#10;&#10;右クリックでOCR機能を利用できます"
                 disabled={isProcessing}
             />
+            <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                style={{ display: 'none' }}
+            />
+            {contextMenu && (
+                <div
+                    className="context-menu"
+                    style={{ left: contextMenu.x, top: contextMenu.y }}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="context-menu-parent">
+                        <div 
+                            className="context-menu-item"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                console.log('Menu clicked, current state:', submenuVisible);
+                                setSubmenuVisible(!submenuVisible);
+                            }}
+                        >
+                            <span>画像から文字の読み取り</span>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <polyline points="9 18 15 12 9 6" />
+                            </svg>
+                        </div>
+                        <div className="context-menu-submenu" style={{ display: submenuVisible ? 'block' : 'none' }}>
+                            <div className="context-menu-item" onClick={handleOCRFromClipboard}>
+                                クリップボードから
+                            </div>
+                            <div className="context-menu-item" onClick={handleOCRFromFile}>
+                                ファイルを選択
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
             <div className="editor-hint">
                 <span>入力後2秒で自動保存</span>
                 <span>•</span>
-                <span>ボタン・ドラッグ・貼り付けでOCR</span>
+                <span>右クリックでOCR</span>
                 <span>•</span>
                 <span>Enterで改行</span>
             </div>
