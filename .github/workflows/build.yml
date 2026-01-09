@@ -57,12 +57,14 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev \
-            tesseract-ocr libtesseract-dev libleptonica-dev
+            python3 python3-pip
+          pip3 install paddleocr paddlepaddle --break-system-packages
 
       - name: Install macOS dependencies
         if: runner.os == 'macOS'
         run: |
-          brew install tesseract leptonica pkg-config
+          brew install python3
+          pip3 install paddleocr paddlepaddle
 
       - name: Install Windows dependencies
         if: runner.os == 'Windows'
@@ -72,18 +74,21 @@ jobs:
           update: true
           install: >-
             mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-tesseract-ocr
-            mingw-w64-x86_64-leptonica
             mingw-w64-x86_64-pkg-config
+            mingw-w64-x86_64-python
+            mingw-w64-x86_64-python-pip
+
+      - name: Install PaddleOCR (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          pip install paddleocr paddlepaddle
 
       - name: Set Windows environment
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           echo "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          echo "PKG_CONFIG_PATH=C:\msys64\mingw64\lib\pkgconfig" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          echo "CGO_CFLAGS=-IC:\msys64\mingw64\include" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          echo "CGO_LDFLAGS=-LC:\msys64\mingw64\lib" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           echo "CGO_ENABLED=1" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           echo "CC=C:\msys64\mingw64\bin\gcc.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           echo "CXX=C:\msys64\mingw64\bin\g++.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
@@ -101,16 +106,8 @@ jobs:
 
       - name: Build application (Windows)
         if: runner.os == 'Windows'
-        shell: msys2 {0}
-        run: |
-          export PATH="/c/hostedtoolcache/go/1.25.5/x64/bin:/c/Users/runneradmin/go/bin:$PATH"
-          export PKG_CONFIG_PATH="/mingw64/lib/pkgconfig"
-          export CGO_CFLAGS="-I/mingw64/include"
-          export CGO_LDFLAGS="-L/mingw64/lib"
-          export CGO_ENABLED=1
-          export CC=/mingw64/bin/gcc
-          export CXX=/mingw64/bin/g++
-          wails build ${{ matrix.build-args }} -clean
+        shell: pwsh
+        run: wails build ${{ matrix.build-args }} -clean
 
       - name: Prepare artifacts (Linux/macOS)
         if: runner.os != 'Windows'
