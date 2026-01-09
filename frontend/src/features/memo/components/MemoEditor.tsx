@@ -30,15 +30,20 @@ const MemoEditor: React.FC<MemoEditorProps> = ({
     const [isSaving, setIsSaving] = useState(false);
     const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null);
     const [submenuVisible, setSubmenuVisible] = useState(false);
+    const [history, setHistory] = useState<string[]>([initialContent]);
+    const [historyIndex, setHistoryIndex] = useState(0);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const initialContentRef = useRef(initialContent);
     const saveTimeoutRef = useRef<number | null>(null);
+    const isUndoRedoRef = useRef(false);
 
     useEffect(() => {
         setContent(initialContent);
         initialContentRef.current = initialContent;
         setHasChanges(false);
+        setHistory([initialContent]);
+        setHistoryIndex(0);
     }, [initialContent]);
 
     useEffect(() => {
@@ -78,10 +83,66 @@ const MemoEditor: React.FC<MemoEditorProps> = ({
         };
     }, [content, hasChanges, autoSave]);
 
+    // Undo/Redo処理
+    const handleUndo = () => {
+        if (historyIndex > 0) {
+            const newIndex = historyIndex - 1;
+            setHistoryIndex(newIndex);
+            isUndoRedoRef.current = true;
+            setContent(history[newIndex]);
+            setHasChanges(history[newIndex] !== initialContentRef.current);
+        }
+    };
+
+    const handleRedo = () => {
+        if (historyIndex < history.length - 1) {
+            const newIndex = historyIndex + 1;
+            setHistoryIndex(newIndex);
+            isUndoRedoRef.current = true;
+            setContent(history[newIndex]);
+            setHasChanges(history[newIndex] !== initialContentRef.current);
+        }
+    };
+
+    // キーボードショートカット
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+        const isCtrlOrCmd = isMac ? e.metaKey : e.ctrlKey;
+
+        if (isCtrlOrCmd && e.shiftKey && e.key === 'Z') {
+            // Ctrl+Shift+Z or Cmd+Shift+Z: Redo
+            e.preventDefault();
+            handleRedo();
+        } else if (isCtrlOrCmd && e.key === 'y') {
+            // Ctrl+Y: Redo (Windows style)
+            e.preventDefault();
+            handleRedo();
+        } else if (isCtrlOrCmd && e.key === 'z') {
+            // Ctrl+Z or Cmd+Z: Undo
+            e.preventDefault();
+            handleUndo();
+        }
+    };
+
     const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
         const newContent = e.target.value;
         setContent(newContent);
         setHasChanges(newContent !== initialContentRef.current);
+        
+        // Undo/Redoからの変更でなければ履歴に追加
+        if (!isUndoRedoRef.current) {
+            // 現在位置以降の履歴を削除して新しい履歴を追加
+            const newHistory = history.slice(0, historyIndex + 1);
+            newHistory.push(newContent);
+            // 履歴は最大100件まで
+            if (newHistory.length > 100) {
+                newHistory.shift();
+            } else {
+                setHistoryIndex(historyIndex + 1);
+            }
+            setHistory(newHistory);
+        }
+        isUndoRedoRef.current = false;
     };
 
     const handleContextMenu = (e: React.MouseEvent<HTMLTextAreaElement>) => {
@@ -114,6 +175,16 @@ const MemoEditor: React.FC<MemoEditorProps> = ({
                 const newText = content.substring(0, start) + text + content.substring(end);
                 setContent(newText);
                 setHasChanges(true);
+
+                // 履歴に追加
+                const newHistory = history.slice(0, historyIndex + 1);
+                newHistory.push(newText);
+                if (newHistory.length > 100) {
+                    newHistory.shift();
+                } else {
+                    setHistoryIndex(historyIndex + 1);
+                }
+                setHistory(newHistory);
 
                 // カーソル位置を更新
                 setTimeout(() => {
@@ -242,6 +313,7 @@ const MemoEditor: React.FC<MemoEditorProps> = ({
                 className="memo-textarea"
                 value={content}
                 onChange={handleContentChange}
+                onKeyDown={handleKeyDown}
                 onContextMenu={handleContextMenu}
                 placeholder="メモを入力してください...&#10;&#10;右クリックでOCR機能を利用できます"
                 disabled={isProcessing}
