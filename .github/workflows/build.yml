@@ -57,14 +57,13 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev \
-            python3 python3-pip
-          pip3 install paddleocr paddlepaddle --break-system-packages
+            tesseract-ocr libtesseract-dev libleptonica-dev \
+            tesseract-ocr-jpn tesseract-ocr-eng
 
       - name: Install macOS dependencies
         if: runner.os == 'macOS'
         run: |
-          brew install python3
-          pip3 install paddleocr paddlepaddle
+          brew install tesseract tesseract-lang
 
       - name: Install Windows dependencies
         if: runner.os == 'Windows'
@@ -74,24 +73,23 @@ jobs:
           update: true
           install: >-
             mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-tesseract-ocr
+            mingw-w64-x86_64-leptonica
             mingw-w64-x86_64-pkg-config
-            mingw-w64-x86_64-python
-            mingw-w64-x86_64-python-pip
-
-      - name: Install PaddleOCR (Windows)
-        if: runner.os == 'Windows'
-        shell: msys2 {0}
-        run: |
-          pip install paddleocr paddlepaddle
+            mingw-w64-x86_64-tesseract-data-jpn
+            mingw-w64-x86_64-tesseract-data-eng
 
       - name: Set Windows environment
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           echo "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          echo "PKG_CONFIG_PATH=C:\msys64\mingw64\lib\pkgconfig" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "CGO_CFLAGS=-IC:\msys64\mingw64\include" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "CGO_LDFLAGS=-LC:\msys64\mingw64\lib" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           echo "CGO_ENABLED=1" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          echo "CC=C:\msys64\mingw64\bin\gcc.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          echo "CXX=C:\msys64\mingw64\bin\g++.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "CC=gcc" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "CXX=g++" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
@@ -106,7 +104,6 @@ jobs:
 
       - name: Build application (Windows)
         if: runner.os == 'Windows'
-        shell: pwsh
         run: wails build ${{ matrix.build-args }} -clean
 
       - name: Prepare artifacts (Linux/macOS)

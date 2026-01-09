@@ -2,37 +2,25 @@ package ocr
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"time"
-)
 
-// OCRResult PaddleOCR結果
-type OCRResult struct {
-	Text  string `json:"text"`
-	Error string `json:"error"`
-}
+	"github.com/otiai10/gosseract/v2"
+)
 
 // Service OCRサービス
 type Service struct {
-	tempDir      string
-	pythonScript string
+	tempDir string
 }
 
 // NewService 新しいOCRサービスを作成
 func NewService() *Service {
 	tempDir := filepath.Join(".", "temp")
 	os.MkdirAll(tempDir, 0755)
-
-	// PaddleOCRスクリプトのパスを取得
-	scriptPath := filepath.Join("backend", "features", "ocr", "paddleocr_script.py")
-
 	return &Service{
-		tempDir:      tempDir,
-		pythonScript: scriptPath,
+		tempDir: tempDir,
 	}
 }
 
@@ -53,33 +41,33 @@ func (s *Service) ProcessImage(imageData string) (string, error) {
 	defer os.Remove(tempFile) // 処理後に削除
 
 	// OCR処理
-	return s.runPaddleOCR(tempFile)
+	client := gosseract.NewClient()
+	defer client.Close()
+
+	// 日本語と英語に対応
+	client.SetLanguage("jpn", "eng")
+	client.SetImage(tempFile)
+
+	text, err := client.Text()
+	if err != nil {
+		return "", fmt.Errorf("OCR processing failed: %w", err)
+	}
+
+	return text, nil
 }
 
 // ProcessImageFromPath ファイルパスから画像を処理
 func (s *Service) ProcessImageFromPath(imagePath string) (string, error) {
-	return s.runPaddleOCR(imagePath)
-}
+	client := gosseract.NewClient()
+	defer client.Close()
 
-// runPaddleOCR PaddleOCRを実行
-func (s *Service) runPaddleOCR(imagePath string) (string, error) {
-	// Pythonスクリプトを実行
-	cmd := exec.Command("python3", s.pythonScript, imagePath)
+	client.SetLanguage("jpn", "eng")
+	client.SetImage(imagePath)
 
-	output, err := cmd.CombinedOutput()
+	text, err := client.Text()
 	if err != nil {
-		return "", fmt.Errorf("failed to execute PaddleOCR: %w, output: %s", err, string(output))
+		return "", fmt.Errorf("OCR processing failed: %w", err)
 	}
 
-	// JSON結果をパース
-	var result OCRResult
-	if err := json.Unmarshal(output, &result); err != nil {
-		return "", fmt.Errorf("failed to parse OCR result: %w, output: %s", err, string(output))
-	}
-
-	if result.Error != "" {
-		return "", fmt.Errorf("OCR processing failed: %s", result.Error)
-	}
-
-	return result.Text, nil
+	return text, nil
 }

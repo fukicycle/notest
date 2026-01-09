@@ -4,6 +4,7 @@ go 1.23.0
 
 require (
 	github.com/gin-gonic/gin v1.11.0
+	github.com/otiai10/gosseract/v2 v2.4.1
 	github.com/wailsapp/wails/v2 v2.11.0
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.1
