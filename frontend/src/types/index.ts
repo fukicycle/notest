@@ -1,6 +1,5 @@
 export interface Memo {
   id: number;
-  title: string;
   content: string;
   source: 'manual' | 'ocr';
   created_at: string;
@@ -8,13 +7,11 @@ export interface Memo {
 }
 
 export interface CreateMemoRequest {
-  title: string;
   content: string;
   source?: 'manual' | 'ocr';
 }
 
 export interface UpdateMemoRequest {
-  title: string;
   content: string;
 }
 

@@ -1,59 +1,69 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import './App.css';
 import { memoApi } from './api/client';
-import { Memo, CreateMemoRequest, UpdateMemoRequest } from './types';
+import { Memo, CreateMemoRequest } from './types';
 import MemoItem from './features/memo/components/MemoItem';
-import MemoForm from './features/memo/components/MemoForm';
-import OCRCapture from './features/ocr/components/OCRCapture';
+import MemoEditor from './features/memo/components/MemoEditor';
+
+type ViewMode = 'list' | 'editor';
 
 function App() {
   const [memos, setMemos] = useState<Memo[]>([]);
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [editingMemo, setEditingMemo] = useState<Memo | null>(null);
-  const [showForm, setShowForm] = useState(false);
   const [searchKeyword, setSearchKeyword] = useState('');
-  const [ocrText, setOcrText] = useState('');
-  const [activeTab, setActiveTab] = useState<'manual' | 'ocr'>('manual');
+  const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // メモ一覧を読み込み
   useEffect(() => {
     loadMemos();
   }, []);
 
+  // 検索展開時にフォーカス
+  useEffect(() => {
+    if (isSearchExpanded && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [isSearchExpanded]);
+
   const loadMemos = async () => {
     try {
+      setLoading(true);
       const data = await memoApi.getAll();
       setMemos(data);
     } catch (error) {
       console.error('Failed to load memos:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleCreateMemo = async (data: CreateMemoRequest) => {
+  const handleCreateMemo = async (content: string, source: 'manual' | 'ocr' = 'manual') => {
     try {
-      await memoApi.create(data);
+      await memoApi.create({ content, source });
       await loadMemos();
-      setShowForm(false);
-      setOcrText('');
-      setActiveTab('manual');
+      // エディタは閉じない（連続入力を許可）
     } catch (error) {
       console.error('Failed to create memo:', error);
+      throw error; // エラーをエディタに返す
     }
   };
 
-  const handleUpdateMemo = async (data: UpdateMemoRequest) => {
+  const handleUpdateMemo = async (content: string) => {
     if (!editingMemo) return;
     try {
-      await memoApi.update(editingMemo.id, data);
+      await memoApi.update(editingMemo.id, { content });
       await loadMemos();
-      setEditingMemo(null);
-      setShowForm(false);
+      // エディタは閉じない（連続編集を許可）
     } catch (error) {
       console.error('Failed to update memo:', error);
+      throw error; // エラーをエディタに返す
     }
   };
 
   const handleDeleteMemo = async (id: number) => {
-    if (!window.confirm('このメモを削除しますか？')) return;
     try {
       await memoApi.delete(id);
       await loadMemos();
@@ -62,9 +72,19 @@ function App() {
     }
   };
 
-  const handleEditMemo = (memo: Memo) => {
+  const handleMemoClick = (memo: Memo) => {
     setEditingMemo(memo);
-    setShowForm(true);
+    setViewMode('editor');
+  };
+
+  const handleNewMemo = () => {
+    setEditingMemo(null);
+    setViewMode('editor');
+  };
+
+  const handleBackToList = () => {
+    setViewMode('list');
+    setEditingMemo(null);
   };
 
   const handleSearch = async () => {
@@ -80,100 +100,96 @@ function App() {
     }
   };
 
-  const handleOCRTextExtracted = (text: string) => {
-    setOcrText(text);
-    setActiveTab('manual');
+  const handleSearchKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleSearch();
+    }
   };
 
-  const handleNewMemo = () => {
-    setEditingMemo(null);
-    setShowForm(true);
-  };
+  const filteredMemos = memos;
 
-  const handleCancelForm = () => {
-    setShowForm(false);
-    setEditingMemo(null);
-    setOcrText('');
-  };
+  if (viewMode === 'editor') {
+    return (
+      <MemoEditor
+        initialContent={editingMemo?.content || ''}
+        onSave={editingMemo ? handleUpdateMemo : handleCreateMemo}
+        onBack={handleBackToList}
+      />
+    );
+  }
 
   return (
-    <div id="App">
+    <div className="app">
       <header className="app-header">
-        <h1>📝 メモアプリ</h1>
+        <h1 className="app-title">メモ</h1>
         <div className="header-actions">
-          <div className="search-box">
-            <input
-              type="text"
-              placeholder="検索..."
-              value={searchKeyword}
-              onChange={(e) => setSearchKeyword(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-            />
-            <button onClick={handleSearch}>検索</button>
+          <div className={`search-container ${isSearchExpanded ? 'expanded' : ''}`}>
+            <button
+              className="search-icon-btn"
+              onClick={() => setIsSearchExpanded(!isSearchExpanded)}
+              title="検索"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.35-4.35" />
+              </svg>
+            </button>
+            {isSearchExpanded && (
+              <input
+                ref={searchInputRef}
+                type="text"
+                className="search-input"
+                placeholder="検索..."
+                value={searchKeyword}
+                onChange={(e) => setSearchKeyword(e.target.value)}
+                onKeyPress={handleSearchKeyPress}
+                onBlur={() => {
+                  if (!searchKeyword) {
+                    setTimeout(() => setIsSearchExpanded(false), 200);
+                  }
+                }}
+              />
+            )}
           </div>
-          <button onClick={handleNewMemo} className="btn-new">
-            新規メモ
-          </button>
         </div>
       </header>
 
       <main className="app-main">
-        {showForm ? (
-          <div className="form-container">
-            <h2>{editingMemo ? 'メモを編集' : '新規メモ'}</h2>
-            
-            {!editingMemo && (
-              <div className="tabs">
-                <button
-                  className={activeTab === 'manual' ? 'active' : ''}
-                  onClick={() => setActiveTab('manual')}
-                >
-                  手動入力
-                </button>
-                <button
-                  className={activeTab === 'ocr' ? 'active' : ''}
-                  onClick={() => setActiveTab('ocr')}
-                >
-                  OCRで入力
-                </button>
-              </div>
-            )}
-
-            {activeTab === 'ocr' && !editingMemo && (
-              <OCRCapture onTextExtracted={handleOCRTextExtracted} />
-            )}
-
-            <MemoForm
-              initialTitle={editingMemo?.title || ''}
-              initialContent={editingMemo?.content || ocrText}
-              initialSource={ocrText ? 'ocr' : 'manual'}
-              onSubmit={editingMemo ? handleUpdateMemo : handleCreateMemo}
-              onCancel={handleCancelForm}
-              submitLabel={editingMemo ? '更新' : '作成'}
-            />
+        {loading ? (
+          <div className="loading-state">
+            <div className="spinner"></div>
+          </div>
+        ) : filteredMemos.length === 0 ? (
+          <div className="empty-state">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="12" y1="18" x2="12" y2="12" />
+              <line x1="9" y1="15" x2="15" y2="15" />
+            </svg>
+            <p>メモがありません</p>
+            <span className="empty-hint">下の + ボタンから最初のメモを作成しましょう</span>
           </div>
         ) : (
-          <div className="memo-list">
-            {memos.length === 0 ? (
-              <div className="empty-state">
-                <p>メモがありません</p>
-                <button onClick={handleNewMemo} className="btn-new">
-                  最初のメモを作成
-                </button>
-              </div>
-            ) : (
-              memos.map((memo) => (
-                <MemoItem
-                  key={memo.id}
-                  memo={memo}
-                  onEdit={handleEditMemo}
-                  onDelete={handleDeleteMemo}
-                />
-              ))
-            )}
+          <div className="memo-grid">
+            {filteredMemos.map((memo) => (
+              <MemoItem
+                key={memo.id}
+                memo={memo}
+                onClick={handleMemoClick}
+                onDelete={handleDeleteMemo}
+              />
+            ))}
           </div>
         )}
       </main>
+
+      <button className="fab" onClick={handleNewMemo} title="新規メモ">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      </button>
     </div>
   );
 }

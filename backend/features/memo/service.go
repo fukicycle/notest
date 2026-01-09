@@ -15,9 +15,8 @@ func NewService(repo *Repository) *Service {
 }
 
 // CreateMemo 新しいメモを作成
-func (s *Service) CreateMemo(title, content, source string) (*models.Memo, error) {
+func (s *Service) CreateMemo(content, source string) (*models.Memo, error) {
 	memo := &models.Memo{
-		Title:   title,
 		Content: content,
 		Source:  source,
 	}
@@ -39,13 +38,12 @@ func (s *Service) GetMemoByID(id uint) (*models.Memo, error) {
 }
 
 // UpdateMemo メモを更新
-func (s *Service) UpdateMemo(id uint, title, content string) (*models.Memo, error) {
+func (s *Service) UpdateMemo(id uint, content string) (*models.Memo, error) {
 	memo, err := s.repo.GetByID(id)
 	if err != nil {
 		return nil, err
 	}
 
-	memo.Title = title
 	memo.Content = content
 
 	err = s.repo.Update(memo)

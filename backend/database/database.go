@@ -45,6 +45,13 @@ func Initialize() error {
 
 // AutoMigrate 自動マイグレーション
 func AutoMigrate() error {
+	// 既存のテーブルにTitleカラムが存在する場合は削除
+	if DB.Migrator().HasColumn(&models.Memo{}, "title") {
+		if err := DB.Migrator().DropColumn(&models.Memo{}, "title"); err != nil {
+			log.Printf("Warning: Failed to drop title column: %v", err)
+		}
+	}
+
 	return DB.AutoMigrate(
 		&models.Memo{},
 	)

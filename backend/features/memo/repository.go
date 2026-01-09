@@ -51,7 +51,7 @@ func (r *Repository) Delete(id uint) error {
 // Search メモを検索
 func (r *Repository) Search(keyword string) ([]models.Memo, error) {
 	var memos []models.Memo
-	result := r.db.Where("title LIKE ? OR content LIKE ?", "%"+keyword+"%", "%"+keyword+"%").
+	result := r.db.Where("content LIKE ?", "%"+keyword+"%").
 		Order("updated_at desc").
 		Find(&memos)
 	return memos, result.Error

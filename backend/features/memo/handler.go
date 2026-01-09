@@ -20,7 +20,6 @@ func NewHandler(service *Service) *Handler {
 // CreateMemo メモ作成ハンドラー
 func (h *Handler) CreateMemo(c *gin.Context) {
 	var req struct {
-		Title   string `json:"title" binding:"required"`
 		Content string `json:"content" binding:"required"`
 		Source  string `json:"source"`
 	}
@@ -34,7 +33,7 @@ func (h *Handler) CreateMemo(c *gin.Context) {
 		req.Source = "manual"
 	}
 
-	memo, err := h.service.CreateMemo(req.Title, req.Content, req.Source)
+	memo, err := h.service.CreateMemo(req.Content, req.Source)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -80,7 +79,6 @@ func (h *Handler) UpdateMemo(c *gin.Context) {
 	}
 
 	var req struct {
-		Title   string `json:"title" binding:"required"`
 		Content string `json:"content" binding:"required"`
 	}
 
@@ -89,7 +87,7 @@ func (h *Handler) UpdateMemo(c *gin.Context) {
 		return
 	}
 
-	memo, err := h.service.UpdateMemo(uint(id), req.Title, req.Content)
+	memo, err := h.service.UpdateMemo(uint(id), req.Content)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
