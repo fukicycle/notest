@@ -11,32 +11,8 @@ on:
 
 jobs:
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Linux
-            os: ubuntu-22.04           
-            build-args: -platform linux/amd64
-            output-name: notest-linux-amd64
-            
-          - name: Windows
-            os: windows-latest
-            build-args: -platform windows/amd64
-            output-name: notest-windows-amd64.exe
-            
-          - name: macOS (Intel)
-            os: macos-latest
-            build-args: -platform darwin/amd64
-            output-name: notest-darwin-amd64
-            
-          - name: macOS (Apple Silicon)
-            os: macos-latest
-            build-args: -platform darwin/arm64
-            output-name: notest-darwin-arm64
-
-    runs-on: ${{ matrix.os }}
-    name: Build ${{ matrix.name }}
+    runs-on: ubuntu-22.04
+    name: Build Linux
 
     steps:
       - name: Checkout code
@@ -53,43 +29,11 @@ jobs:
           node-version: '24'
 
       - name: Install Linux dependencies
-        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev \
             tesseract-ocr libtesseract-dev libleptonica-dev \
             tesseract-ocr-jpn tesseract-ocr-eng
-
-      - name: Install macOS dependencies
-        if: runner.os == 'macOS'
-        run: |
-          brew install tesseract tesseract-lang
-
-      - name: Install Windows dependencies
-        if: runner.os == 'Windows'
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW64
-          update: true
-          install: >-
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-tesseract-ocr
-            mingw-w64-x86_64-leptonica
-            mingw-w64-x86_64-pkg-config
-            mingw-w64-x86_64-tesseract-data-jpn
-            mingw-w64-x86_64-tesseract-data-eng
-
-      - name: Set Windows environment
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          echo "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          echo "PKG_CONFIG_PATH=C:\msys64\mingw64\lib\pkgconfig" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          echo "CGO_CFLAGS=-IC:\msys64\mingw64\include" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          echo "CGO_LDFLAGS=-LC:\msys64\mingw64\lib" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          echo "CGO_ENABLED=1" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          echo "CC=gcc" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          echo "CXX=g++" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
@@ -98,31 +42,18 @@ jobs:
         working-directory: ./frontend
         run: npm install
 
-      - name: Build application (Linux/macOS)
-        if: runner.os != 'Windows'
-        run: wails build ${{ matrix.build-args }} -clean
+      - name: Build application
+        run: wails build -platform linux/amd64 -clean
 
-      - name: Build application (Windows)
-        if: runner.os == 'Windows'
-        run: wails build ${{ matrix.build-args }} -clean
-
-      - name: Prepare artifacts (Linux/macOS)
-        if: runner.os != 'Windows'
+      - name: Prepare artifacts
         run: |
           mkdir -p artifacts
           cp build/bin/* artifacts/ || true
 
-      - name: Prepare artifacts (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path artifacts
-          Copy-Item -Path "build/bin/*" -Destination "artifacts/" -Recurse -Force
-
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.output-name }}
+          name: notest-linux-amd64
           path: artifacts/*
           retention-days: 30
 
